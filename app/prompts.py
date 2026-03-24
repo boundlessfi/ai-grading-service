@@ -13,6 +13,15 @@ Description: {hackathon_description}
 
 ---
 
+# Evidence Provided
+## GitHub Repository Analysis
+{repo_analysis}
+
+## Extracted Content/Files
+{extracted_content}
+
+---
+
 # Submission Details
 Team: {team_name}
 Project: {project_name}
@@ -90,12 +99,14 @@ You MUST respond with valid JSON in this exact structure:
 """
 
 def build_grading_prompt(
-    submission: SubmissionInput
+    submission: SubmissionInput,
+    repo_analysis: str = "No deep repository analysis available.",
+    extracted_content: str = "No additional files extracted."
 ) -> str:
-    """Build the grading prompt with submission and context data"""
+    """Build the grading prompt with submission, context, and evidence"""
     context = submission.hackathon_context
     
-    # Default values if context is missing for some reason
+    # Default values if context is missing
     hack_name = context.name if context else "Stellar Hackathon"
     hack_desc = context.description if context else "Build innovative applications on Stellar"
     hack_criteria = context.judging_criteria if context else "Standard hackathon criteria (Innovation, Tech, UX, etc.)"
@@ -106,6 +117,8 @@ def build_grading_prompt(
         hackathon_description=hack_desc,
         judging_criteria=hack_criteria,
         duration_hours=hack_duration,
+        repo_analysis=repo_analysis,
+        extracted_content=extracted_content,
         team_name=submission.team_name,
         project_name=submission.project_name,
         tagline=submission.tagline,

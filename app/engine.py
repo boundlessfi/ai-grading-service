@@ -5,7 +5,11 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from .models import HackathonGradingResult, SubmissionInput
+import tempfile
 from .prompts import build_grading_prompt
+from .services.extractor import RepoAnalyzer
+from .services.file_reader import FileExtractor
+import httpx
 
 load_dotenv()
 
@@ -19,6 +23,8 @@ class HackathonGradingEngine:
         
         self.client = Anthropic(api_key=self.api_key)
         self.model = "claude-3-5-sonnet-20241022"
+        self.repo_analyzer = RepoAnalyzer()
+        self.file_extractor = FileExtractor()
     
     async def grade_submission(
         self,
@@ -34,9 +40,49 @@ class HackathonGradingEngine:
             HackathonGradingResult with scores and feedback
         """
         
-        # Build prompt
+        # 1. Advanced Analysis (Code/Repo)
+        repo_evidence = "No deep repository analysis available."
+        if submission.github_url:
+            analysis = await self.repo_analyzer.analyze_repo(submission.github_url)
+            if "error" not in analysis:
+                repo_evidence = f"""
+                Lines of Code stats: {json.dumps(analysis['cloc'], indent=2)}
+                Complexity analysis: {json.dumps(analysis['complexity'], indent=2)}
+                """
+                # Use extracted readme if better
+                if analysis.get('readme') and len(analysis['readme']) > (len(submission.readme_content or "")):
+                    submission.readme_content = analysis['readme']
+
+        # 2. File Content Extraction
+        extracted_content = "No additional files extracted."
+        if submission.file_urls:
+            extracted_texts = []
+            async with httpx.AsyncClient() as client:
+                for url in submission.file_urls:
+                    try:
+                        resp = await client.get(url, timeout=10.0)
+                        if resp.status_code == 200:
+                            # Save temp file to extract
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(url)[1]) as tmp:
+                                tmp.write(resp.content)
+                                tmp_path = tmp.name
+                            
+                            text = self.file_extractor.extract_text(tmp_path)
+                            if text:
+                                extracted_texts.append(f"--- Content from {url} ---\n{text}")
+                            
+                            os.unlink(tmp_path)
+                    except Exception as e:
+                        extracted_texts.append(f"Error extracting from {url}: {str(e)}")
+            
+            if extracted_texts:
+                extracted_content = "\n\n".join(extracted_texts)
+
+        # 3. Build prompt with evidence
         prompt = build_grading_prompt(
-            submission=submission
+            submission=submission,
+            repo_analysis=repo_evidence,
+            extracted_content=extracted_content
         )
         
         # Call Claude API

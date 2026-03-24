@@ -36,19 +36,15 @@ async def test_grading():
         duration_hours=48
     )
 
-    # Sample submission
+    # Sample submission (using a real public repo for testing)
     submission = SubmissionInput(
         submission_id="test_001",
         team_name="Stellar Builders",
-        project_name="PayStream",
-        tagline="Real-time payment streaming on Stellar",
-        description="""
-        PayStream is a decentralized payment streaming protocol built on Stellar.
-        It allows users to create continuous payment streams for subscriptions,
-        salaries, or any recurring payment use case.
-        """,
-        github_url="https://github.com/team/paystream",
-        readme_content="# PayStream\n\nA DEX built during the hackathon...",
+        project_name="Stellar Python SDK",
+        tagline="Python library for communicating with a Stellar Horizon server",
+        description="The Stellar Python SDK is a library for communicating with a Stellar Horizon server.",
+        github_url="https://github.com/StellarCN/py-stellar-base.git",
+        readme_content="# py-stellar-base\n\nPython library for Stellar...",
         demo_video_url="https://youtube.com/watch?v=demo123",
         live_demo_url="https://paystream-demo.vercel.app",
         hackathon_context=hack_context

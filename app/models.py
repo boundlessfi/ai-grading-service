@@ -49,5 +49,6 @@ class SubmissionInput(BaseModel):
     github_url: Optional[str] = None
     demo_video_url: Optional[str] = None
     live_demo_url: Optional[str] = None
+    file_urls: List[str] = Field(default_factory=list, description="URLs to documents (PDF, Docx) for analysis")
     readme_content: Optional[str] = None
     hackathon_context: Optional[HackathonContext] = None
