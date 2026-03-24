@@ -46,7 +46,7 @@ async def test_grading():
         It implements a constant product market maker (CPMM) model, allowing users
         to swap assets and provide liquidity in a permissionless way.
         """,
-        github_url="https://github.com/pact-fi/pact-stellar-contracts.git",
+        github_url="https://github.com/lumensLabs/TrustAnchor.git",
         stellar_address="GDJWSUHK636G7S3E7K3E7K3E7K3E7K3E7K3E7K3E7K3E7K3E7K3E7K3E7K", # Placeholder
         demo_video_url="https://www.youtube.com/watch?v=pact_demo",
         live_demo_url="https://pact.fi",
