@@ -1,6 +1,8 @@
 import asyncio
 import os
+import re
 import sys
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Add the current directory to sys.path to allow absolute imports
@@ -10,6 +12,167 @@ from app.engine import HackathonGradingEngine
 from app.models import SubmissionInput, HackathonContext
 
 load_dotenv()
+
+RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+
+
+def _slug(name: str) -> str:
+    """Convert project name to a safe filename slug."""
+    slug = name.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    return slug.strip("-")
+
+
+def _next_result_path(slug: str) -> str:
+    """Return the next available results/<slug>.md path.
+
+    First run  → results/soroswap.md
+    Second run → results/soroswap-1.md
+    Third run  → results/soroswap-2.md  …
+    """
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    base = os.path.join(RESULTS_DIR, f"{slug}.md")
+    if not os.path.exists(base):
+        return base
+    n = 1
+    while n < 10_000:
+        candidate = os.path.join(RESULTS_DIR, f"{slug}-{n}.md")
+        if not os.path.exists(candidate):
+            return candidate
+        n += 1
+    # Fallback (practically unreachable)
+    return os.path.join(RESULTS_DIR, f"{slug}-{n}.md")
+
+
+def save_result_markdown(project_name: str, result) -> str:
+    """Write a Markdown report to results/ and return the file path."""
+    slug = _slug(project_name)
+    path = _next_result_path(slug)
+
+    lines = []
+    rec = result.recommendation.replace("_", " ")
+    lines.append(f"# Grading Report — {project_name}")
+    lines.append(f"")
+    lines.append(f"| Field | Value |")
+    lines.append(f"|---|---|")
+    lines.append(f"| **Overall Score** | {result.overall_score}/10 |")
+    lines.append(f"| **Recommendation** | {rec} |")
+    lines.append(f"| **Confidence** | {result.confidence_level} |")
+    if result.confidence_reasoning:
+        lines.append(f"| **Confidence Reasoning** | {result.confidence_reasoning} |")
+    lines.append(f"| **Evidence Completeness** | {result.evidence_completeness * 100:.0f}% |")
+    lines.append(f"| **Graded At** | {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} |")
+    lines.append(f"| **Model** | {result.grading_model} |")
+    lines.append("")
+
+    # Criterion scores
+    lines.append("## Criterion Scores")
+    lines.append("")
+    criteria = [
+        ("Innovation", result.innovation),
+        ("Technical Execution", result.technical_execution),
+        ("Stellar Integration", result.stellar_integration),
+        ("UX / Design", result.ux_design),
+        ("Completeness", result.completeness),
+    ]
+    for name, c in criteria:
+        lines.append(f"### {name} — {c.score}/10")
+        lines.append("")
+        lines.append(c.reasoning)
+        lines.append("")
+        if c.sub_scores:
+            lines.append("**Sub-scores:**")
+            for k, v in c.sub_scores.items():
+                lines.append(f"- {k.replace('_', ' ').title()}: {v}")
+            lines.append("")
+        if c.strengths:
+            lines.append("**Strengths:**")
+            for s in c.strengths:
+                lines.append(f"- ✅ {s}")
+            lines.append("")
+        if c.weaknesses:
+            lines.append("**Weaknesses:**")
+            for w in c.weaknesses:
+                lines.append(f"- ❌ {w}")
+            lines.append("")
+
+    # Code quality metrics
+    if result.code_quality_metrics:
+        m = result.code_quality_metrics
+        lines.append("## Code Quality Metrics")
+        lines.append("")
+        lines.append(f"| Metric | Value |")
+        lines.append(f"|---|---|")
+        lines.append(f"| Files | {m.total_files} |")
+        lines.append(f"| Lines of Code | {m.total_lines} |")
+        lines.append(f"| Primary Language | {m.primary_language or 'N/A'} |")
+        lines.append(f"| Has Tests | {'Yes' if m.has_tests else 'No'} ({m.test_file_count} files) |")
+        lines.append(f"| CI/CD | {'Yes' if m.has_ci_cd else 'No'} |")
+        lines.append(f"| Soroban Contract | {'Yes' if m.soroban_contract_detected else 'No'} ({m.smart_contract_count} contracts) |")
+        lines.append(f"| Commits | {m.commit_count} |")
+        lines.append(f"| Contributors | {m.contributor_count} |")
+        lines.append(f"| Avg Complexity Rank | {m.avg_complexity_rank} |")
+        lines.append(f"| Dependencies | {m.dependency_count} |")
+        if m.security_patterns_found:
+            lines.append(f"| Security ✅ | {'; '.join(m.security_patterns_found)} |")
+        if m.security_issues_found:
+            lines.append(f"| Security ❌ | {'; '.join(m.security_issues_found)} |")
+        lines.append("")
+
+    # Technical depth
+    if result.technical_depth_assessment:
+        lines.append("## Technical Depth Assessment")
+        lines.append("")
+        lines.append(result.technical_depth_assessment)
+        lines.append("")
+
+    # Stellar-specific findings
+    if result.stellar_specific_findings:
+        lines.append("## Stellar-Specific Findings")
+        lines.append("")
+        for f in result.stellar_specific_findings:
+            lines.append(f"- {f}")
+        lines.append("")
+
+    # Red flags
+    if result.red_flags:
+        lines.append("## ⚠️ Red Flags")
+        lines.append("")
+        for flag in result.red_flags:
+            lines.append(f"- {flag}")
+        lines.append("")
+
+    # Plagiarism
+    if result.plagiarism_indicators:
+        lines.append("## Plagiarism / Rule Violation Indicators")
+        lines.append("")
+        lines.append("| Confidence | Type | Detail |")
+        lines.append("|---|---|---|")
+        for ind in result.plagiarism_indicators:
+            lines.append(f"| {ind.confidence} | {ind.flag_type} | {ind.detail} |")
+        lines.append("")
+
+    # Standout features
+    if result.standout_features:
+        lines.append("## ✨ Standout Features")
+        lines.append("")
+        for feat in result.standout_features:
+            lines.append(f"- {feat}")
+        lines.append("")
+
+    # Improvement suggestions
+    if result.improvement_suggestions:
+        lines.append("## 💡 Improvement Suggestions")
+        lines.append("")
+        for sug in result.improvement_suggestions:
+            lines.append(f"- {sug}")
+        lines.append("")
+
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+
+    return path
 
 
 def print_result(result):
@@ -147,6 +310,8 @@ async def test_soroswap():
     engine = HackathonGradingEngine()
     result = await engine.grade_submission(submission=submission)
     print_result(result)
+    path = save_result_markdown(submission.project_name, result)
+    print(f"📄 Report saved → {path}")
     return result
 
 
@@ -196,6 +361,8 @@ async def test_soroban_did():
     engine = HackathonGradingEngine()
     result = await engine.grade_submission(submission=submission)
     print_result(result)
+    path = save_result_markdown(submission.project_name, result)
+    print(f"📄 Report saved → {path}")
     return result
 
 
